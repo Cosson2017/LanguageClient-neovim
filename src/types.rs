@@ -1,5 +1,7 @@
 use super::*;
 use crate::rpcclient::RpcClient;
+use crate::viewport::Viewport;
+use crate::vim::Vim;
 use std::sync::mpsc;
 
 pub type Fallible<T> = failure::Fallible<T>;
@@ -67,7 +69,9 @@ pub trait SyncWrite: Write + Sync + Send + Debug {}
 impl SyncWrite for BufWriter<ChildStdin> {}
 impl SyncWrite for BufWriter<TcpStream> {}
 
+/// Rpc message id.
 pub type Id = u64;
+/// Langauge server id.
 pub type LanguageId = Option<String>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -98,13 +102,15 @@ pub struct State {
     #[serde(skip_serializing)]
     pub clients: HashMap<LanguageId, RpcClient>,
 
+    #[serde(skip_serializing)]
+    pub vim: Vim,
+
     pub capabilities: HashMap<String, Value>,
     pub registrations: Vec<Registration>,
     pub roots: HashMap<String, String>,
     pub text_documents: HashMap<String, TextDocumentItem>,
     pub text_documents_metadata: HashMap<String, TextDocumentItemMetadata>,
     // filename => diagnostics.
-    // TODO: convert to filename => line => diagnostics, where line => diagnostics is a TreeMap.
     pub diagnostics: HashMap<String, Vec<Diagnostic>>,
     #[serde(skip_serializing)]
     pub line_diagnostics: HashMap<(String, u64), String>,
@@ -127,6 +133,7 @@ pub struct State {
     pub last_cursor_line: u64,
     pub last_line_diagnostic: String,
     pub stashed_codeAction_commands: Vec<Command>,
+    pub viewport: Viewport,
 
     // User settings.
     pub serverCommands: HashMap<String, Vec<String>>,
@@ -173,8 +180,10 @@ impl State {
             tx,
 
             clients: hashmap! {
-                None => client,
+                None => client.clone(),
             },
+
+            vim: Vim::new(client),
 
             capabilities: HashMap::new(),
             registrations: vec![],
@@ -199,6 +208,7 @@ impl State {
             last_cursor_line: 0,
             last_line_diagnostic: " ".into(),
             stashed_codeAction_commands: vec![],
+            viewport: Viewport::new(0, 0),
 
             serverCommands: HashMap::new(),
             autoStart: true,
@@ -547,8 +557,10 @@ pub struct VimCompleteItem {
     pub icase: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dup: Option<u64>,
+    /// Deprecated. Use `user_data` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
+    /// Deprecated. Use `user_data` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_snippet: Option<bool>,
     // NOTE: `user_data` can only be string in vim. So cannot specify concrete type here.
@@ -560,6 +572,8 @@ pub struct VimCompleteItem {
 pub struct VimCompleteItemUserData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lspitem: Option<CompletionItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
 }
 
 impl VimCompleteItem {
@@ -593,13 +607,10 @@ impl VimCompleteItem {
             }
         }
 
-        let is_snippet;
         let snippet;
         if lspitem.insert_text_format == Some(InsertTextFormat::Snippet) {
-            is_snippet = Some(true);
             snippet = Some(word.clone());
         } else {
-            is_snippet = None;
             snippet = None;
         };
 
@@ -610,6 +621,7 @@ impl VimCompleteItem {
 
         let user_data = VimCompleteItemUserData {
             lspitem: Some(lspitem.clone()),
+            snippet: snippet.clone(),
         };
 
         Ok(VimCompleteItem {
@@ -624,8 +636,8 @@ impl VimCompleteItem {
                 .replace("\n", " "),
             info,
             kind: lspitem.kind.map(|k| format!("{:?}", k)).unwrap_or_default(),
+            is_snippet: Some(snippet.is_some()),
             snippet,
-            is_snippet,
             user_data: Some(serde_json::to_string(&user_data)?),
         })
     }
@@ -893,6 +905,7 @@ pub enum VimVar {
     Filename,
     Line,
     Character,
+    Viewport,
     Text,
     Cword,
     NewName,
@@ -914,6 +927,7 @@ impl VimExp for VimVar {
             VimVar::Filename => "filename",
             VimVar::Line => "line",
             VimVar::Character => "character",
+            VimVar::Viewport => "viewport",
             VimVar::Text => "text",
             VimVar::Cword => "cword",
             VimVar::NewName => "newName",
@@ -931,6 +945,7 @@ impl VimExp for VimVar {
             VimVar::Filename => "LSP#filename()",
             VimVar::Line => "LSP#line()",
             VimVar::Character => "LSP#character()",
+            VimVar::Viewport => "LSP#viewport()",
             VimVar::Text => "LSP#text()",
             VimVar::Cword => "expand('<cword>')",
             VimVar::NewName | VimVar::GotoCmd => "v:null",
@@ -1124,4 +1139,11 @@ impl FromLSP<SymbolInformation> for QuickfixEntry {
             typ: None,
         })
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct VirtualText {
+    pub line: u64,
+    pub text: String,
+    pub hl_group: String,
 }
