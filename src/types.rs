@@ -580,20 +580,33 @@ impl VimCompleteItem {
     pub fn from_lsp(
         lspitem: &CompletionItem,
         complete_position: Option<u64>,
+        typed: String,
     ) -> Fallible<VimCompleteItem> {
         let abbr = lspitem.label.clone();
         let mut word = lspitem.insert_text.clone().unwrap_or_default();
         if word.is_empty() {
             match (lspitem.text_edit.clone(), complete_position) {
                 (Some(text_edit), Some(complete_position)) => {
+                    let complete_position = complete_position as usize - 1;
+                    let text_start = text_edit.range.start.character as usize;
                     // TextEdit range start might be different from vim expected completion start.
                     // From spec, TextEdit can only span one line, i.e., the current line.
-                    if text_edit.range.start.character != complete_position {
+                    if text_start < complete_position {
                         word = text_edit
                             .new_text
                             .get((complete_position as usize)..)
                             .and_then(|line| line.split_whitespace().next())
                             .map_or_else(String::new, ToOwned::to_owned);
+                    } else if text_start > complete_position {
+                        //                       word = typed[(complete_position as usize)..] + text_edit.new_text;
+                        word = typed.get(complete_position..).map_or_else(
+                            || text_edit.new_text.clone(),
+                            |pre| {
+                                let mut nt = text_edit.new_text.clone();
+                                nt.insert_str(0, pre);
+                                nt
+                            },
+                        )
                     } else {
                         word = text_edit.new_text.clone();
                     }

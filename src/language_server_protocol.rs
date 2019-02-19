@@ -2218,7 +2218,7 @@ impl LanguageClient {
 
         let matches: Fallible<Vec<VimCompleteItem>> = matches
             .iter()
-            .map(|item| VimCompleteItem::from_lsp(item, complete_position))
+            .map(|item| VimCompleteItem::from_lsp(item, complete_position, "".to_string()))
             .collect();
         let matches = matches?;
         info!("End {}", REQUEST__OmniComplete);
@@ -2681,9 +2681,12 @@ impl LanguageClient {
             CompletionResponse::List(list) => list.items,
         }
         .iter()
-        .map(|item| VimCompleteItem::from_lsp(item, None))
+        //.map(|item| VimCompleteItem::from_lsp(item, None))
+        .map(|item| VimCompleteItem::from_lsp(item, Some(ctx.startcol), ctx.typed.clone()))
         .collect();
         let matches = matches?;
+        let rj = json!([ctx.startcol, matches]);
+        error!("refresh comp: {}", rj);
         self.vim()?.rpcclient.notify(
             "cm#complete",
             json!([info.name, ctx, ctx.startcol, matches, is_incomplete]),
@@ -2726,13 +2729,18 @@ impl LanguageClient {
                 CompletionResponse::List(list) => list.items,
             }
             .iter()
-            .map(|item| VimCompleteItem::from_lsp(item, None))
+            //.map(|item| VimCompleteItem::from_lsp(item, None))
+            .map(|item| VimCompleteItem::from_lsp(item, Some(ctx.startccol), ctx.typed.clone()))
             .collect();
             matches = matches_result?;
         } else {
             is_incomplete = true;
             matches = vec![];
         }
+
+        let cj = json!([ctx.startccol, matches]);
+        error!("compete source: {}", cj);
+        error!("ctx: {:?}", ctx);
         self.vim()?.rpcclient.notify(
             "ncm2#complete",
             json!([orig_ctx, ctx.startccol, matches, is_incomplete]),
