@@ -2685,8 +2685,6 @@ impl LanguageClient {
         .map(|item| VimCompleteItem::from_lsp(item, Some(ctx.startcol), ctx.typed.clone()))
         .collect();
         let matches = matches?;
-        let rj = json!([ctx.startcol, matches]);
-        error!("refresh comp: {}", rj);
         self.vim()?.rpcclient.notify(
             "cm#complete",
             json!([info.name, ctx, ctx.startcol, matches, is_incomplete]),
@@ -2738,9 +2736,6 @@ impl LanguageClient {
             matches = vec![];
         }
 
-        let cj = json!([ctx.startccol, matches]);
-        error!("compete source: {}", cj);
-        error!("ctx: {:?}", ctx);
         self.vim()?.rpcclient.notify(
             "ncm2#complete",
             json!([orig_ctx, ctx.startccol, matches, is_incomplete]),

@@ -577,6 +577,71 @@ pub struct VimCompleteItemUserData {
 }
 
 impl VimCompleteItem {
+//    pub fn from_lsp_origin(
+//        lspitem: &CompletionItem,
+//        complete_position: Option<u64>,
+//    ) -> Fallible<VimCompleteItem> {
+//        let abbr = lspitem.label.clone();
+//        let mut word = lspitem.insert_text.clone().unwrap_or_default();
+//        if word.is_empty() {
+//            match (lspitem.text_edit.clone(), complete_position) {
+//                (Some(text_edit), Some(complete_position)) => {
+//                    // TextEdit range start might be different from vim expected completion start.
+//                    // From spec, TextEdit can only span one line, i.e., the current line.
+//                    if text_edit.range.start.character < complete_position {
+//                        word = text_edit
+//                            .new_text
+//                            .get((complete_position as usize)..)
+//                            .and_then(|line| line.split_whitespace().next())
+//                            .map_or_else(String::new, ToOwned::to_owned);
+//                    } else {
+//                        word = text_edit.new_text.clone();
+//                    }
+//                }
+//                (Some(text_edit), _) => {
+//                    word = text_edit.new_text.clone();
+//                }
+//                (_, _) => {
+//                    word = lspitem.label.clone();
+//                }
+//            }
+//        }
+//
+//        let snippet;
+//        if lspitem.insert_text_format == Some(InsertTextFormat::Snippet) {
+//            snippet = Some(word.clone());
+//        } else {
+//            snippet = None;
+//        };
+//
+//        let mut info = String::new();
+//        if let Some(ref doc) = lspitem.documentation {
+//            info += &doc.to_string();
+//        }
+//
+//        let user_data = VimCompleteItemUserData {
+//            lspitem: Some(lspitem.clone()),
+//            snippet: snippet.clone(),
+//        };
+//
+//        Ok(VimCompleteItem {
+//            word,
+//            abbr,
+//            icase: Some(1),
+//            dup: Some(1),
+//            menu: lspitem
+//                .detail
+//                .clone()
+//                .unwrap_or_default()
+//                .replace("\n", " "),
+//            info,
+//            kind: lspitem.kind.map(|k| format!("{:?}", k)).unwrap_or_default(),
+//            is_snippet: Some(snippet.is_some()),
+//            snippet,
+//            user_data: Some(serde_json::to_string(&user_data)?),
+//        })
+//    }
+
     pub fn from_lsp(
         lspitem: &CompletionItem,
         complete_position: Option<u64>,
