@@ -856,6 +856,13 @@ impl LanguageClient {
         Ok(())
     }
 
+    fn float_ui<D>(&self, to_display: &D) -> Fallible<()>
+    where
+        D: ToDisplay + ?Sized,
+    {
+        Ok(())
+    }
+
     fn preview<D>(&self, to_display: &D) -> Fallible<()>
     where
         D: ToDisplay + ?Sized,
