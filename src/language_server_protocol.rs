@@ -110,17 +110,19 @@ impl LanguageClient {
             .as_ref(),
         )?;
 
-        let (diagnosticsSignsMax, documentHighlightDisplay, selectionUI_autoOpen, use_virtual_text): (
-            Option<u64>,
-            Value,
-            u8,
-            u8,
-        ) = self.vim()?.eval(
+        let (
+            diagnosticsSignsMax,
+            documentHighlightDisplay,
+            selectionUI_autoOpen,
+            use_virtual_text,
+            echo_project_root,
+        ): (Option<u64>, Value, u8, u8, u8) = self.vim()?.eval(
             [
                 "get(g:, 'LanguageClient_diagnosticsSignsMax', v:null)",
                 "get(g:, 'LanguageClient_documentHighlightDisplay', {})",
                 "!!s:GetVar('LanguageClient_selectionUI_autoOpen', 1)",
                 "s:useVirtualText()",
+                "!!s:GetVar('LanguageClient_echoProjectRoot', 1)",
             ]
             .as_ref(),
         )?;
@@ -207,6 +209,7 @@ impl LanguageClient {
             state.hoverPreview = hoverPreview;
             state.completionPreferTextEdit = completionPreferTextEdit;
             state.use_virtual_text = use_virtual_text == 1;
+            state.echo_project_root = echo_project_root == 1;
             state.loggingFile = loggingFile;
             state.loggingLevel = loggingLevel;
             state.serverStderr = serverStderr;
@@ -868,27 +871,12 @@ impl LanguageClient {
         D: ToDisplay + ?Sized,
     {
         let bufname = "__LanguageClient__";
-
-        let cmd = "silent! pedit! +setlocal\\ buftype=nofile\\ nobuflisted\\ noswapfile\\ nonumber";
-        let cmd = if let Some(ref ft) = to_display.vim_filetype() {
-            format!("{}\\ filetype={} {}", cmd, ft, bufname)
-        } else {
-            format!("{} {}", cmd, bufname)
-        };
-        self.vim()?.command(cmd)?;
-
+        let filetype = &to_display.vim_filetype();
         let lines = to_display.to_display();
-        if self.get(|state| state.is_nvim)? {
-            let bufnr: u64 = serde_json::from_value(self.vim()?.rpcclient.call("bufnr", bufname)?)?;
-            self.vim()?
-                .rpcclient
-                .notify("nvim_buf_set_lines", json!([bufnr, 0, -1, 0, lines]))?;
-        } else {
-            self.vim()?
-                .rpcclient
-                .notify("setbufline", json!([bufname, 1, lines]))?;
-            // TODO: removing existing bottom lines.
-        }
+
+        self.vim()?
+            .rpcclient
+            .notify("s:OpenHoverPreview", json!([bufname, lines, filetype]))?;
 
         Ok(())
     }
@@ -2761,7 +2749,9 @@ impl LanguageClient {
             .into()
         };
         let message = format!("Project root: {}", root);
-        self.vim()?.echomsg_ellipsis(&message)?;
+        if self.get(|state| state.echo_project_root)? {
+            self.vim()?.echomsg_ellipsis(&message)?;
+        }
         info!("{}", message);
         self.update(|state| {
             state.roots.insert(languageId.clone(), root.clone());
